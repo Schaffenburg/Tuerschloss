@@ -1,8 +1,8 @@
 //**************************************************************//
 //  Name    : gatekeeper                                        //
 //  Author  : Karsten Schlachter                                //
-//  Date    : Oktober 2015 letztes update Nov 16                //
-//  Version : 1.2                                               //
+//  Date    : Oktober 2015 letztes update Jan 17                //
+//  Version : 1.3                                               //
 //  Notes   : Software fuer Tuer-Arduino                        //
 //  Web   : https://wiki.schaffenburg.org/Projekt:Tuerschloss   // 
 //****************************************************************
@@ -16,13 +16,16 @@
  
 #define ONTIME_LEVEL1 5000
 #define ONTIME_LEVEL2 10000 
+
+//zeit um tuer nach aufschliessen zu oeffnen in sekunden
+#define TIME_TO_OPEN 30
  
  //VORSICHT: pin 2(sda)&3(scl) enstprechen beim leonardo den genutzten scl und sda pins für i2c (bei uno a4(sda) u a5(scl))
-int pinServo=11,pinServoPower=8;
-int pinRGB_R=5,pinRGB_G=13;
-int pinDoorSense=4;
-int pinMotionSense=0;
-int pinButton=9;
+const int pinServo=11,pinServoPower=8;
+const int pinRGB_R=5,pinRGB_G=13;
+const int pinDoorSense=4;
+const int pinMotionSense=0;
+const int pinButton=9;
 
 
 void sendData();
@@ -39,8 +42,8 @@ RGBColor statusLight={0,0,0};
 
 unsigned long lastLightChange=0;
 
-int fwd=0;
-LockState lockState=MOVING;//-1=fehler 0=gestoppt 1=verriegelt 2=offen
+volatile int fwd=0;
+volatile LockState lockState=MOVING;//-1=fehler 0=gestoppt 1=verriegelt 2=offen
 int lastButtonState=0,buttonState=0;
 int lastDoorState=0,doorState=0;
 int stopped=0;
@@ -53,7 +56,9 @@ boolean position2=false;
 
 boolean bewegungsstatus;
 unsigned long curMillis=0, lastMotion=0,lastAction=0;
+unsigned long unlockTime=0;
 int curLightLevel=0;
+boolean doorOpenedAfterUnlock=false;
 
 Servo servo;
 
@@ -123,7 +128,37 @@ void checkMotion(){
   
 }
 
+void door_lock(){
+  lockState=MOVING;
+    fwd=0;
+    updateLastAction();
+}
 
+void door_unlock(){
+  lockState=MOVING;
+    fwd=1;
+    updateLastAction();
+}
+
+  void doorStateChanged(){
+    if(doorState==0){//tuerblatt geschlossen
+
+      //wenn tuer auf schliessen wartet um zu verriegeln
+      if(lockState==DOLOCK){
+        //TODO: das geht (wie es meiste hier) um einiges sauberer..
+              //etwas zeit zum schliessen der tür lassen (und um es sich nochmal anders zu ueberlegen weil man was vergessen hat)
+              delay(3000);
+              //tuer immernoch geschlossen oder zwischenzeitlich wieder geoeffnet?
+              doorState=digitalRead(pinDoorSense);//status nochmals updaten       
+              if(doorState==0){
+                 door_lock();
+               }
+      }
+      
+    }else{//tuerblatt geoeffnet
+      doorOpenedAfterUnlock=true;
+    }
+  }
 
 void setup() {
 
@@ -232,33 +267,33 @@ void loop() {
     
   lastButtonState=buttonState;
 
-  if(lockState==DOLOCK){
 
-    //bei tuer von offen nach zu verriegeln
-      doorState=digitalRead(pinDoorSense);
+  //aenderungen im zustand der tuer (blatt offen/geschlossen) ueberwachen
+  doorState=digitalRead(pinDoorSense);
   if(doorState != lastDoorState){
-    Serial.println("door state changed");
-        if(doorState==0){//tuer geschlossen
-              //etwas zeit zum schliessen der tür lassen (und um es sich nochmal anders zu ueberlegen weil man was vergessen hat)
-              delay(3000);
-              //tuer immernoch geschlossen oder zwischenzeitlich wieder geoeffnet?
-              doorState=digitalRead(pinDoorSense);//status updaten       
-              if(doorState==0){
+    doorStateChanged();
+  }
+  lastDoorState=doorState;
 
-                  lockState=MOVING;
-                  fwd=0;
-               }
 
-          }
-    }
-    lastDoorState=doorState;
-    
-  }else{
+
+  if(lockState!=DOLOCK){
+
  
-    if(fwd==1){
+    if(fwd==1){//tuer aufschliessen
+      if(lockState!=OPEN){//wenn noch nicht entriegelt erledigen wir das
         lockState=MOVING;
         setServoPos(0);
         lockState=OPEN;
+        unlockTime=millis();
+        doorOpenedAfterUnlock=false;//ueberwachung fuer oeffnen zuruecksetzen
+      }else{//
+        if(doorOpenedAfterUnlock==false && (((millis()-unlockTime)/1000)>TIME_TO_OPEN)){//falls tuer zu lange nicht geoeffnet wird wieder verriegeln
+          Serial.println("wieder zu!");
+          door_lock(); 
+        }
+      }
+
     }else{
         lockState=MOVING;
         setServoPos(120);
@@ -296,13 +331,10 @@ int input_len=0;
 boolean exec_cmd(char cmd[]){
 
   if (strcmp(cmd,"open") == 0){//oeffnen orignal code: 1
-    fwd=1;
-    updateLastAction();
+      door_unlock();
   
   }else if(strcmp(cmd,"close") == 0){//code 2
-    fwd=0;
-    updateLastAction();
-    
+      door_lock();  
   }else {//status uebermitteln
    //nichts tun - status wird immer zurueckgegeben
     return false;
