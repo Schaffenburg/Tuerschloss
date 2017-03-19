@@ -1,8 +1,8 @@
 //**************************************************************//
 //  Name    : gatekeeper                                        //
 //  Author  : Karsten Schlachter                                //
-//  Date    : Oktober 2015 letztes update Jan 17                //
-//  Version : 1.3                                               //
+//  Date    : Oktober 2015 letztes update Maerz 17                //
+//  Version : 1.4                                               //
 //  Notes   : Software fuer Tuer-Arduino                        //
 //  Web   : https://wiki.schaffenburg.org/Projekt:Tuerschloss   // 
 //****************************************************************
@@ -12,6 +12,7 @@
 
 #include <Wire.h>
 #include <Servo.h> 
+#include <RCSwitch.h>
 #define SLAVE_ADDRESS 0x04
  
 #define ONTIME_LEVEL1 5000
@@ -26,6 +27,13 @@ const int pinRGB_R=5,pinRGB_G=13;
 const int pinDoorSense=4;
 const int pinMotionSense=0;
 const int pinButton=9;
+
+const char POWERSWITCH_GROUP[]="11111";
+const char POWERSWITCH_ID[]="00100";
+
+const int pinRadio=10;
+
+RCSwitch powerSwitch = RCSwitch();
 
 
 void sendData();
@@ -132,12 +140,26 @@ void door_lock(){
   lockState=MOVING;
     fwd=0;
     updateLastAction();
+
+      //steckdose aus
+      for(int i=0;i<5;i++){//sicherheitshalber mehrfach senden
+              powerSwitch.switchOff(POWERSWITCH_GROUP, POWERSWITCH_ID);
+              delay(100);
+      }
+
 }
 
 void door_unlock(){
   lockState=MOVING;
     fwd=1;
     updateLastAction();
+
+    //steckdose an      
+    for(int i=0;i<5;i++){//sicherheitshalber mehrfach senden
+              powerSwitch.switchOn(POWERSWITCH_GROUP, POWERSWITCH_ID);
+              delay(100);
+      }
+     
 }
 
   void doorStateChanged(){
@@ -162,11 +184,12 @@ void door_unlock(){
 
 void setup() {
 
+  powerSwitch.enableTransmit(pinRadio);
  
   pinMode(pinRGB_R, OUTPUT);
   pinMode(pinRGB_G, OUTPUT);
   
-  pinMode(9,INPUT_PULLUP);
+  pinMode(pinButton,INPUT_PULLUP);
 
   pinMode(pinDoorSense,INPUT_PULLUP);
   pinMode(pinMotionSense,INPUT);
@@ -206,9 +229,8 @@ void loop() {
                   Serial.println("verriegeln abgebrochen");
                 }else{//im verriegelten zustand tuer entsperren
                     //TODO: dauerhaftes halten für 0.5 oder 1s voraussetzen
-                     lockState=MOVING;
-                     fwd=1;
-                     Serial.println("tuer entriegeln - derzeit deaktiviert");
+                      door_unlock();
+                     Serial.println("tuer entriegeln");
                   }
                 /*  fwd=!fwd;
               Serial.println("fwd-change");
@@ -286,7 +308,11 @@ void loop() {
         setServoPos(0);
         lockState=OPEN;
         unlockTime=millis();
-        doorOpenedAfterUnlock=false;//ueberwachung fuer oeffnen zuruecksetzen
+
+        //nur zuruecksetzen, wenn blatt nicht schon offen
+        if(doorState==0){//blatt zu
+          doorOpenedAfterUnlock=false;//ueberwachung fuer oeffnen zuruecksetzen
+        }
       }else{//
         if(doorOpenedAfterUnlock==false && (((millis()-unlockTime)/1000)>TIME_TO_OPEN)){//falls tuer zu lange nicht geoeffnet wird wieder verriegeln
           Serial.println("wieder zu!");
