@@ -28,8 +28,12 @@ const int pinDoorSense=4;
 const int pinMotionSense=0;
 const int pinButton=9;
 
+//TODO: normal muesste man das ganze als objekte mit gemeinsamer elternklasse (zb powerswitch basisklasse; powerswitchTypeA, powerswitchTypeB als childs mit je zweit strings oder ints als attribute) machen
+//..da drauf hab ich aber jetzt kein bock weil das eh demnächst auf ein anderes system ausgelagert wird, deswegen der folgende pfusch fuer die beiden typen
 const char POWERSWITCH_GROUP[]="11111";
 const char POWERSWITCH_ID[]="00100";
+const int POWERSWITCH_GROUP2=4;
+const int POWERSWITCH_ID2=4;
 
 const int pinRadio=10;
 
@@ -142,9 +146,15 @@ void door_lock(){
     updateLastAction();
 
       //steckdose aus
-      for(int i=0;i<5;i++){//sicherheitshalber mehrfach senden
+      for(int i=0;i<3;i++){//sicherheitshalber mehrfach senden
               powerSwitch.switchOff(POWERSWITCH_GROUP, POWERSWITCH_ID);
-              delay(100);
+              delay(10);
+      }
+
+            //steckdose aus
+      for(int i=0;i<3;i++){//sicherheitshalber mehrfach senden
+              powerSwitch.switchOff(POWERSWITCH_GROUP2, POWERSWITCH_ID2);
+              delay(10);
       }
 
 }
@@ -155,9 +165,15 @@ void door_unlock(){
     updateLastAction();
 
     //steckdose an      
-    for(int i=0;i<5;i++){//sicherheitshalber mehrfach senden
+    for(int i=0;i<3;i++){//sicherheitshalber mehrfach senden
               powerSwitch.switchOn(POWERSWITCH_GROUP, POWERSWITCH_ID);
-              delay(100);
+              delay(10);
+      }
+
+          //steckdose an      
+    for(int i=0;i<3;i++){//sicherheitshalber mehrfach senden
+              powerSwitch.switchOn(POWERSWITCH_GROUP2, POWERSWITCH_ID2);
+              delay(10);
       }
      
 }
